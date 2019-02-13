@@ -1,0 +1,300 @@
+---
+title: "Channel Attribution"
+author: "Gobind Agarwal"
+date: "13 February"
+output:
+  html_document:
+    number_sections: yes
+
+---
+# - Problem Statement
+An E-Commerce Company conducted a survey on movement of customers. Customer before purchasing a product goes through many different channels (touch points). This company wants to invest in these channels for better sales of their product. Instead of blindly sharing the investment over all the channels, can there be any other strategy for investing only on focused chosen channels.
+
+In total there are 22 Channels :-
+
+
+|     Channel Number      |    Description        |
+|------------------|----------------|
+|     0            |    Start        |
+| 1,2,3  | Company’s website or competitor’s website.|
+| 4,5,6,7,8  | Industry Advisory Research Reports.|
+| 9,10  | Organic Searches, Forums {Online/Reviews}.|
+| 11  | Aggregators.|
+| 12,13  | Social Network.|
+| 14  | Expert online or offline.|
+| 15,16,17  | Physical Stores.|
+| 18,19  | Others such as Promotional Campaigns at various location.|
+| 20  | Deciding Which product to buy.|
+| 21  | Product is brought.|
+
+
+
+# - Dataset
+Our Given Dataset looks like this :-
+```{r echo=FALSE}
+CA<-read.csv("Channel_Attribution_MarkovChain.csv") 
+head(CA)  # -  - Showing the first 6 entries of the dataset
+```
+
+-X0 is the starting state of a customer {=0}
+
+-X1 is the first channel of customer in his/her journey to buy product
+
+-X2 is the second channel and similarly the rest Xi's
+
+-21 being the state when customer has already purchased that product so after -21 the datapoints are 'NA'
+
+# - Step Matrix
+```{r echo=FALSE}
+column=c(1:21) # -  -  X0 to X20 
+step_matrix=matrix(data  =  0, nrow  =  22, ncol  =  22)
+# -  - counting transition from one node to any othernode
+for (i in 1:nrow(CA)){
+  for (j in column){if(CA[column][i,j]==21){break()}else{
+      step_matrix [CA[column][i,j]+1 , CA[column][i,j+1]+1]  =  step_matrix[CA[column][i,j]+1 , CA[column][i,j+1]+1] + 1 }}
+  }
+step_matrix
+```
+In this Matrix,
+
+** index  =  1 to 22 but state  =  0 to 21
+
+0 being starting point, 21 being product purchased
+
+This shows from state 0 (start) to state 1 (channel 1)  =  130 customers came
+
+74 customers went from state 9 (channel 9) to state 16 (channel 16)
+
+# - Number of steps taken by customers to purchase the product
+```{r echo=FALSE}
+Total_step=matrix(data=0,ncol=21)
+for (i in 1:nrow(CA)){
+  for (j in 1:21){
+    if(CA[column][i,j]==21){Total_step[j]=Total_step[j]+1
+    break()}
+  }
+}
+
+barplot(Total_step,names.arg = c(1:21),ylab = "Number of customers",main="Number of steps to purchase the product")
+```
+
+We can see from this Graph, that FIRST TOUCH will not help much, because Customers are taking 5 - 6 steps before purchasing the product
+
+# - Transtion matrix
+
+```{r echo=FALSE}
+# -  - stepmatrix divide by total number of steps taken from that paticular node
+
+Transtion_matrix=matrix(data  =  0, nrow  =  22, ncol  =  22)
+for (i in 1:22){
+  for (j in 1:22){
+    Transtion_matrix[i,j]  =  step_matrix[i,j] / sum(step_matrix[i,])
+    if(is.nan(Transtion_matrix[i,j])){Transtion_matrix[i,j]=0}}
+}
+Transtion_matrix[22,22]=1  # - # -  Property of Transition Matrix {Sum of row should be  =  1}
+Transtion_matrix
+```
+
+This Matrix shows the Probability of the customer, going from one state to another state in ONE single jump
+
+In order words, from state 9(index 10) there is a Probability of 0.08418658 to go to state 16(index 17)
+
+- Probability > 0 , means there exists a path between those two states
+
+- Probability  =  0 , means NO customer till now has chosen that path between those two states
+
+- Probability  =  1 , only in state 21 (index 22) because of absorbing state
+
+- Sum of Each Row  =  1
+
+
+
+# - N-Step Transition Matrix
+```{r echo=FALSE,,size="Small"}
+# - Multipling transition matrix with itself for 21 number of times
+Transtion_matrix_N  =  matrix(data  =  0, nrow  =  22, ncol  =  22)
+Transtion_matrix_N=Transtion_matrix 
+for (i in 1:21){Transtion_matrix_N=Transtion_matrix_N %*% Transtion_matrix}
+Transtion_matrix_N
+```
+
+This Matrix is (Transition Matrix) ^ N 
+
+This Matrix shows the Probability of the customer, going from one state to another state in N-jumps
+
+- Sum of Each Row still  =  1
+
+- If we observe from state 0(index 1) to state 21(index 22) , Probability ~ 1 or  = 1 , because in N steps it is sure that customer is purchasing that product
+
+- Conversion Rate = 0.9979875 {state 0(index 1, start) to state 21(index 22, purchase)}
+
+# -  REMOVAL EFFECT
+
+This is done by removing ONE Channel at a time and calculating N-Step Transition Matrix without that channel
+
+And then by comparing Conversion Rate {after removing that channel}  with  Conversion Rate {before removing that channel}
+
+Conversion Rate {before removing that channel} = 1  {State 0 to State 21}
+
+Conversion Rate {after removing that channel} if that channel is contributing in sales, should become less than 1
+
+```{r echo=FALSE}
+# - After removing 1 node checking transtion matrix
+Removal=matrix(data  =  0, nrow  =  21)
+for (i in 2:22){
+  Transtion_matrix_2=Transtion_matrix[-i,-i]
+  Temp=matrix(data  =  0, nrow  =  21, ncol  =  21)
+  Temp=Transtion_matrix_2 %*% Transtion_matrix_2
+  for (l in 1:100){Temp=Temp %*% Transtion_matrix_2}
+  Removal[i-1]<-Temp[1,21]/Transtion_matrix_N[1,22]
+}
+Removal
+```
+
+As we can see the values have reduced
+- without channel 1 conversion rate decreased to 0.86 from 1, showing 14% removal effect
+- remove effect of state 21 =1
+
+
+Proportion of removal effect of all 19 channels :-
+```{r echo=FALSE}
+Removal=1-Removal
+Removal_2=Removal[-21] # - it is not a channel
+Removal_2=Removal_2[-20] # - it is not a channel
+s=sum(Removal_2)
+for (i in 1:19){
+  Removal_2[i]=Removal_2[i]/s
+}
+barplot(Removal_2*100,names.arg  =  c(1:19),ylim  =  c(0.1,12),main="Removal Effect",ylab="PERCENT",xlab="CHANNEL",border = "black",space = 0.4,xpd=FALSE)
+```
+
+Removal Effect informs us about each and every Channels individually but when we see each channel as a part of their category, then we get information like this.
+ 
+# -  BY CATEGORY
+```{r echo=FALSE}
+# - dividing channel according to categories
+Removal_3=c()
+Removal_3[1]=(Removal_2[1]+Removal_2[2]+Removal_2[3])/3
+Removal_3[2]=(Removal_2[4]+Removal_2[5]+Removal_2[6]+Removal_2[7]+Removal_2[8])/5
+Removal_3[3]=(Removal_2[9]+Removal_2[10])/2
+Removal_3[4]=Removal_2[11]
+Removal_3[5]=(Removal_2[12]+Removal_2[13])/2
+Removal_3[6]=Removal_2[14]
+Removal_3[7]=(Removal_2[15]+Removal_2[16]+Removal_2[17])/3
+Removal_3[8]=(Removal_2[18]+Removal_2[19])/2
+sRemoval_3=sum(Removal_3)
+Removal_3=Removal_3/sRemoval_3
+# - rem_3
+numb=c(1:8)
+name=c("Website","Research Reports","Online/Reviews","Price Comparison ","Social Media","Expert","Retail Stores","Misc.")
+barplot(Removal_3*100,names.arg  =  numb,ylim  =  c(5,25),main="Category",ylab="PERCENT",legend.text  =  name,col  =  c("violet", "lightblue", "Orange","green", "red","lavender","yellow","grey"),args.legend  =  list(x  =  "topright"))
+```
+
+We can see that Online/Reviews category is best for advertising followed by Social Media and Price Comparison.
+Above we saw that Channel 4 was the best contributing Channel as individual but if that Channel has any problem our sales are affected the most.
+So instead of Single Channel if we can see which category as whole is contributing sales the most and within that category which channel helps the most. We can invest more in such Channels
+
+# - For Online
+For Online/Reviews category, we see channel 10 is contributing more. In removal effect we saw in removal effect that channel 10 was 2nd highest. And channel 9 is 4th Highest as well
+```{r echo=FALSE}
+online=c()
+online[1]=Removal_2[9]
+online[2]=Removal_2[10]
+sonline=sum(online)
+online=online/sonline
+barplot(online*100,ylim=c(45,55),names.arg  = c(9,10),main="Online/Reviews",col="lavender",ylab="PERCENT",xlab="CHANNEL",xpd=FALSE)
+```
+
+# - For Social Network
+For Social Network category, we see channel 13 is contributing more. In removal effect we saw in removal effect that channel 13 was 3rd highest .
+
+```{r echo=FALSE}
+friend=c()
+friend[1]=Removal_2[12]
+friend[2]=Removal_2[13]
+sfriend=sum(friend)
+friend=friend/sfriend
+barplot(friend*100,ylim=c(25,75),names.arg  =  c(12,13),main="Social Network",col="red",ylab="PERCENT",xlab="CHANNEL",xpd=FALSE)
+```
+
+So instead of investing more in channel 4, My recommendation will be to invest more in channel 10 and channel 13
+
+
+# - AFTER MAKING DECISION
+It was observed that many customers after making desicions(touching channel 20) are going to some other channel and then making their purchase.
+
+```{r echo=FALSE}
+
+step_matrix_after_20=matrix(data  =  0, nrow  =  1, ncol  =  22)
+
+for (i in 1:nrow(CA)){
+  for (j in column){
+    if(CA[column][i,j]==21){
+      break()
+      }else if(CA[column][i,j]==20){
+      step_matrix_after_20 [1 , CA[column][i,j+1]+1]  =  step_matrix_after_20[1 , CA[column][i,j+1]+1] + 1 }
+    }
+}
+step_matrix_after_20=step_matrix_after_20[-1]
+step_matrix_after_20=step_matrix_after_20[-20]
+step_matrix_after_20=step_matrix_after_20[-20]
+Transition_after_20 = step_matrix_after_20/sum(step_matrix_after_20)
+
+barplot(Transition_after_20*100,ylim=c(1,15),names.arg  =  c(1:19),main="After deciding to purchase a product",col="violet",ylab="PERCENT",xlab="CHANNEL")
+
+
+```
+
+We see that after making desicions(touching channel 20) customers are mainly going to physical stores for further details about the product.
+So we can't neglect the investment in physical stores.
+
+
+
+# - MONEY
+So I took 3 parameters for deciding the investment:
+
+1.)Removal Effect
+
+2.)Category
+
+3.)After Deciding Movement
+
+I gave rating(2 to 6) for top 5 in each parameters (Channel wise) {1st = 6,5th = 2} and rest all channels = 1 for each parameter {in case of ties 0.5 to each}
+
+The investment (1 lakh) on different Channels is as follows :-
+```{r echo=FALSE}
+money=c()
+money[5]=money[6]=money[7]=money[8]=money[14]=money[18]=money[19]=3
+money[1]=money[2]=money[3]=4
+money[15]=5
+money[11]=6
+money[12]=6.5
+money[17]=9
+money[16]=11
+money[4]=11
+money[9]=11.5
+money[13]=12.5
+money[10]=13.5
+money=money/sum(money)
+money
+investment=100000
+barplot(money*investment,ylim=c(2000,12000),names.arg  =  c(1:19),main="Investment in Channel",col="violet",ylab="RUPEES",xlab="CHANNEL",xpd=FALSE)
+as.matrix(money*investment)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
